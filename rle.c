@@ -1,24 +1,46 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
+
+// Function to safely write to file with error checking
+int safeWrite(const void* data, size_t size, size_t count, FILE* file) {
+    if (fwrite(data, size, count, file) != count) {
+        perror("Write error");
+        return 0;
+    }
+    return 1;
+}
 
 // Function to perform Run Length Encoding and write to a binary file
-void compressRLE(unsigned char* input, int size, FILE* output) {
-    int count;
+int compressRLE(unsigned char* input, size_t size, FILE* output) {
+    if (!input || !output || size == 0) {
+        return 0;
+    }
+
+    // Write original file size for decompression
+    if (!safeWrite(&size, sizeof(size_t), 1, output)) {
+        return 0;
+    }
+
+    size_t count;
     unsigned char current;
 
-    for (int i = 0; i < size; i++) {
+    for (size_t i = 0; i < size; i++) {
         count = 1;
         current = input[i];
 
-        while (i + 1 < size && input[i + 1] == current) {
+        while (i + 1 < size && input[i + 1] == current && count < 255) {
             count++;
             i++;
         }
 
         // Write the count and value to the binary file
-        fwrite(&count, sizeof(int), 1, output);
-        fwrite(&current, sizeof(unsigned char), 1, output);
+        if (!safeWrite(&count, sizeof(unsigned char), 1, output) ||
+            !safeWrite(&current, sizeof(unsigned char), 1, output)) {
+            return 0;
+        }
     }
+    return 1;
 }
 
 int main(int argc, char *argv[]) {
@@ -37,6 +59,13 @@ int main(int argc, char *argv[]) {
     long fileSize = ftell(inputFile);
     fseek(inputFile, 0, SEEK_SET);
 
+    // Check for reasonable file size
+    if (fileSize <= 0 || fileSize > (1024 * 1024 * 1024)) { // 1GB limit
+        fprintf(stderr, "Invalid file size or file too large\n");
+        fclose(inputFile);
+        return 1;
+    }
+
     unsigned char *imageData = (unsigned char *)malloc(fileSize);
     if (!imageData) {
         fprintf(stderr, "Memory allocation failed\n");
@@ -54,7 +83,12 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    compressRLE(imageData, fileSize, outputFile);
+    if (!compressRLE(imageData, fileSize, outputFile)) {
+        fprintf(stderr, "Compression failed\n");
+        free(imageData);
+        fclose(outputFile);
+        return 1;
+    }
 
     free(imageData);
     fclose(outputFile);
