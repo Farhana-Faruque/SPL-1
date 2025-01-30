@@ -3,10 +3,6 @@
 #include "readfile.c"
 #include "HuffmanCod2.c"
 
-// Original BMP structures and Huffman structures
-// ...existing BMPInfo struct...
-// ...existing Node and QueueNode structs...
-
 // Function to write RGB values in binary format
 void write_rgb_binary(unsigned char r, unsigned char g, unsigned char b, FILE *output_file) {
     fprintf(output_file, "R: ");
