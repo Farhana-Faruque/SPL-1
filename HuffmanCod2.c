@@ -2,20 +2,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Huffman tree node structure
 typedef struct Node {
     unsigned char data;
     unsigned freq;
     struct Node *left, *right;
 } Node;
 
-// Priority queue node
 typedef struct QueueNode {
     Node *node;
     struct QueueNode *next;
 } QueueNode;
 
-// Create a new Huffman tree node
 Node* createNode(unsigned char data, unsigned freq) {
     Node* node = (Node*)malloc(sizeof(Node));
     node->data = data;
@@ -24,7 +21,6 @@ Node* createNode(unsigned char data, unsigned freq) {
     return node;
 }
 
-// Add node to priority queue (sorted by frequency)
 void enqueue(QueueNode** head, Node* tree_node) {
     QueueNode* new_node = (QueueNode*)malloc(sizeof(QueueNode));
     new_node->node = tree_node;
@@ -194,7 +190,7 @@ void compressFile(const char* input_path, const char* output_path) {
     fclose(output);
 }
 
-int main(int argc, char* argv[]) {
+/* int main(int argc, char* argv[]) {
     if (argc != 3) {
         printf("Usage: %s <input_file> <output_file>\n", argv[0]);
         return 1;
@@ -203,4 +199,4 @@ int main(int argc, char* argv[]) {
     compressFile(argv[1], argv[2]);
     printf("Compression completed\n");
     return 0;
-}
+} */
