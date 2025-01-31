@@ -16,7 +16,6 @@ void write_rgb_binary(unsigned char r, unsigned char g, unsigned char b, FILE *o
         fprintf(output_file, "%d", (b >> i) & 1);
 }
 
-// Function to compress RGB data using Huffman coding
 void compressRGBData(unsigned char* rgb_data, int data_size, FILE* output_file, FILE* binary_file) {
     // Count frequencies for each RGB value
     unsigned freq[256] = {0};
@@ -77,7 +76,6 @@ void compressRGBData(unsigned char* rgb_data, int data_size, FILE* output_file, 
         fwrite(&buffer, 1, 1, binary_file);
     }
 
-    // Cleanup
     for (int i = 0; i < 256; i++) {
         if (codes[i] != NULL) {
             free(codes[i]);
@@ -103,7 +101,6 @@ int main() {
     int total_size = bmpInfo.width * bmpInfo.height * 3;
     unsigned char* rgb_data = (unsigned char*)malloc(total_size);
     
-    // Read RGB data
     fseek(input_file, bmpInfo.dataOffset, SEEK_SET);
     fread(rgb_data, 1, total_size, input_file);
 
@@ -115,7 +112,6 @@ int main() {
     // Compress and write data
     compressRGBData(rgb_data, total_size, output_file, compressed_file);
 
-    // Cleanup
     free(rgb_data);
     fclose(input_file);
     fclose(output_file);
