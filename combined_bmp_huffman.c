@@ -94,7 +94,6 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    // Read BMP header and info
     BMPInfo bmpInfo = readBMPHeader(input_file);
     
     // Calculate total RGB data size
