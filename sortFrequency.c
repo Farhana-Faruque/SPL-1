@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Structure to store value and its frequency
 typedef struct {
     int value;
     int frequency;
