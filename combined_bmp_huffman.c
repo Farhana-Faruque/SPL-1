@@ -17,7 +17,6 @@ void write_rgb_binary(unsigned char r, unsigned char g, unsigned char b, FILE *o
 }
 
 void compressRGBData(unsigned char* rgb_data, int data_size, FILE* output_file, FILE* binary_file) {
-    // Count frequencies for each RGB value
     unsigned freq[256] = {0};
     for (int i = 0; i < data_size; i++) {
         freq[rgb_data[i]]++;
