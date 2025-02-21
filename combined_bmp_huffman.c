@@ -4,7 +4,6 @@
 #include "HuffmanCod2.c"
 
 void write_rgb_binary(unsigned char r, unsigned char g, unsigned char b, FILE *output_file) {
-    //printf("Debugging: r = %d, g = %d, b = %d\n", r, g, b);
     // fprintf(output_file, "R: ");
     // for (int i = 7; i >= 0; i--) 
     //     fprintf(output_file, "%d", (r >> i) & 1);
