@@ -1,11 +1,26 @@
+#ifndef IMAGE_H
+#define IMAGE_H
+
+// your code, including DictionaryEntry
+
+#include <ctype.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
 
-// Define the basic structures
 typedef struct {
-    uint8_t blue;
-    uint8_t green;
-    uint8_t red;
-} RGB;
+    int prefix;
+    unsigned char character;
+} DictionaryEntry;
+
+
+// Define the basic structures
+/* typedef struct {
+    unsigned int blue;
+    unsigned int green;
+    unsigned int red;
+} RGB; */
+
+#endif // COMPRESSION_H
+
