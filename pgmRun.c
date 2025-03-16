@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "image.h"
 
 #define MAX_SIZE 256  // For 8-bit grayscale values (0-255)
 
@@ -9,30 +10,39 @@ int RunLengthPGM() {
     printf("Enter the PGM file name: ");
     scanf("%255s", inputFile);
 
-    FILE *input = fopen(inputFile, "rb");
-    if (!input) {
-        printf("Cannot open input file\n");
+    char outputFile[] = "compressed.bin";
+
+    FILE *input = fopen(inputFile, "r");
+    FILE *output = fopen(outputFile, "wb");
+    if (!input || !output) {
+        printf("Cannot create output file\n");
         return 1;
     }
 
     // Read PGM header
-    char magic[3];
-    int width, height, maxval;
-    fscanf(input, "%2s\n%d %d\n%d\n", magic, &width, &height, &maxval);
+    PGMHeader pgm;// Read PGM header
+    fscanf(input, "%2s", pgm.magic);
+    fscanf(input, "%d %d", &pgm.width, &pgm.height);
+    fscanf(input, "%d", &pgm.maxval);
+    fgetc(input); // Consume newline
     
-    if ((strcmp(magic, "P2") != 0 && strcmp(magic, "P5") != 0) || maxval > 255) {
+    if ((strcmp(pgm.magic, "P2") != 0 && strcmp(pgm.magic, "P5") != 0) || pgm.maxval > 255) {
         printf("Unsupported PGM format\n");
         fclose(input);
         return 1;
     }
-    
-    int size = width * height;
-    unsigned char* imageData = (unsigned char*)malloc(size);
+
+    fseek(input, 0, SEEK_END);
+    long size = ftell(input);
+    fseek(input, sizeof(pgm), SEEK_SET);
+
+    int size2 = pgm.width * pgm.height;  // Correct pixel count
+    unsigned char* imageData = (unsigned char*)malloc(size2);
     
     // Read image data (ASCII format)
-    if (strcmp(magic, "P2") != 0 || maxval > 255)
+    if (strcmp(pgm.magic, "P2") != 0 || pgm.maxval > 255)
     {
-        for (int i = 0; i < size; i++) {
+        for (int i = 0; i < size2; i++) {
             int pixel;
             fscanf(input, "%d", &pixel);
             imageData[i] = (unsigned char)pixel;
@@ -40,27 +50,18 @@ int RunLengthPGM() {
         fclose(input);
     }
     else{
-        fread(imageData, 1, size, input);
+        fread(imageData, 1, size2, input);
         fclose(input);
     }
 
-    // Compress and write to binary file
-    char outputFile[] = "compressed.pgm";
-    FILE *output = fopen(outputFile, "wb");
-    if (!output) {
-        printf("Cannot create output file\n");
-        return 1;
-    }
-
     // Write header information
-    fwrite(&width, sizeof(int), 1, output);
-    fwrite(&height, sizeof(int), 1, output);
+    fprintf(output, "%2s\n%d %d\n%d\n",pgm.magic, pgm.width, pgm.height, pgm.maxval);
 
     // Compress using Run-Length Encoding
     unsigned char currentValue = imageData[0];
     unsigned char count = 1;
     
-    for (int i = 1; i < size; i++) {
+    for (int i = 1; i < size2; i++) {
         if (imageData[i] == currentValue && count < 255) {
             count++;
         } else {
@@ -83,6 +84,18 @@ int RunLengthPGM() {
     free(imageData);
     printf("Compression complete: %s -> %s\n", inputFile, outputFile);
 
-    //printf("Compression completed successfully\n");
+    // Get original file size
+    printf("Original size: %ld bytes\n", size);
+    
+    // Get compressed file size
+    FILE *check_size = fopen("compressed.bin", "rb");
+    fseek(check_size, 0, SEEK_END);
+    long compressed_size = ftell(check_size);
+    fclose(check_size);
+    
+    printf("Compressed size: %ld bytes\n", compressed_size);
+    printf("Compression ratio: %.2f%%\n", 
+           (1.0 - ((float)compressed_size / size)) * 100); 
+
     return 0;
 }
