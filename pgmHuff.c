@@ -11,31 +11,37 @@ int HuffP2() {
     printf("Enter the PGM file name: ");
     scanf("%255s", inputFile);
 
+    char outputFile[] = "compressed.bin";
+
     FILE *input = fopen(inputFile, "r");
-  // Changed from "rb" to "r" for ASCII
-    if (!input) {
-        printf("Cannot open input file\n");
+    FILE *output = fopen(outputFile, "wb");
+    if (!input || !output) {
+        printf("Cannot create output file\n");
         return 1;
     }
-
-    // Read PGM header
-    char magic[3];
-    int width, height, maxval;
-    fscanf(input, "%2s\n%d %d\n%d\n", magic, &width, &height, &maxval);
     
-    if ((strcmp(magic, "P2") != 0 && strcmp(magic, "P5") != 0) || maxval > 255) {
+    // Read PGM header
+    PGMHeader pgm;
+    fscanf(input, "%2s\n%d %d\n%d\n", pgm.magic, &pgm.width, &pgm.height, &pgm.maxval);
+    // printf("Magic: %s Width: %d Height: %d Maxval: %d ", pgm.magic, pgm.width, pgm.height, pgm.maxval);
+    
+    if ((strcmp(pgm.magic, "P2") != 0 && strcmp(pgm.magic, "P5") != 0) || pgm.maxval > 255) {
         printf("Unsupported PGM format\n");
         fclose(input);
         return 1;
     }
     
-    int size = width * height;
-    unsigned char* imageData = (unsigned char*)malloc(size);
+    fseek(input, 0, SEEK_END);
+    long size = ftell(input);
+    fseek(input, sizeof(pgm), SEEK_SET);
+
+    int size2 = pgm.width * pgm.height;  // Correct pixel count
+    unsigned char* imageData = (unsigned char*)malloc(size2);
     
     // Read image data (ASCII format)
-    if (strcmp(magic, "P2") != 0 || maxval > 255)
+    if (strcmp(pgm.magic, "P2") != 0 || pgm.maxval > 255)
     {
-        for (int i = 0; i < size; i++) {
+        for (int i = 0; i < size2; i++) {
             int pixel;
             fscanf(input, "%d", &pixel);
             imageData[i] = (unsigned char)pixel;
@@ -43,13 +49,13 @@ int HuffP2() {
         fclose(input);
     }
     else{
-        fread(imageData, 1, size, input);
+        fread(imageData, 1, size2, input);
         fclose(input);
     }
 
     // Calculate frequency of each pixel value
     int freq[MAX_SIZE] = {0};
-    for (int i = 0; i < size; i++) {
+    for (int i = 0; i < size2; i++) {
         freq[imageData[i]]++;
     }
 
@@ -61,17 +67,9 @@ int HuffP2() {
     char code[256] = {0};
     generateCodes(root, code, 0, codes);
 
-    // Compress and write to binary file
-    char outputFile[] = "compressed.pgm";
-    FILE *output = fopen(outputFile, "wb");
-    if (!output) {
-        printf("Cannot create output file\n");
-        return 1;
-    }
-
     // Write header information
-    fwrite(&width, sizeof(int), 1, output);
-    fwrite(&height, sizeof(int), 1, output);
+    fwrite(&pgm.width, sizeof(int), 1, output);
+    fwrite(&pgm.height, sizeof(int), 1, output);
 
     // Write Huffman codes table
     for (int i = 0; i < MAX_SIZE; i++) {
@@ -95,7 +93,7 @@ int HuffP2() {
     // Compress image data
     unsigned char buffer = 0;
     int bits = 0;
-    for (int i = 0; i < size; i++) {
+    for (int i = 0; i < size2; i++) {
         unsigned char pixel = imageData[i];
         for (int j = 0; j < codes[pixel].length; j++) {
             buffer = (buffer << 1) | (codes[pixel].code[j] - '0');
@@ -119,6 +117,18 @@ int HuffP2() {
     freeHuffmanTree(root);
     printf("Compression complete: %s -> %s \n", inputFile, outputFile);
 
-    //printf("Compression completed successfully\n");
+    // Get original file size
+    printf("Original size: %ld bytes\n", size);
+    
+    // Get compressed file size
+    FILE *check_size = fopen("compressed.bin", "rb");
+    fseek(check_size, 0, SEEK_END);
+    long compressed_size = ftell(check_size);
+    fclose(check_size);
+    
+    printf("Compressed size: %ld bytes\n", compressed_size);
+    printf("Compression ratio: %.2f%%\n", 
+           (1.0 - ((float)compressed_size / size)) * 100);
+
     return 0;
 }
