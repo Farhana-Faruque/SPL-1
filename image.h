@@ -14,9 +14,13 @@ typedef struct {
     unsigned char character;
 } DictionaryEntry;
 
+typedef struct {
+    char magic[3];
+    int width, height, maxval;
+} PGMHeader;
 
 // Define the basic structures
-/* typedef struct {
+/*typedef struct {
     unsigned int blue;
     unsigned int green;
     unsigned int red;
