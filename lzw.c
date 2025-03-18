@@ -1,344 +1,376 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "image.h"
 
-#define MAX_DICT_SIZE 4096
-#define INITIAL_DICT_SIZE 256
-#define GIF_SIGNATURE "GIF89a"
-#define MIN_CODE_SIZE 8
-#define BLOCK_SIZE 255
-#define MAX_CODE_SIZE 12
-#define CLEAR_CODE(min_size) (1 << (min_size))
-#define END_CODE(min_size) ((1 << (min_size)) + 1)
+#define MAX_SIZE 256
+#define MAX_DICT_SIZE 4096  // 12-bit codes
+#define MAX_LINE 1024
 
-typedef struct {
-    char signature[6];
-    unsigned short width;
-    unsigned short height;
-    unsigned char flags;
-    unsigned char background;
-    unsigned char aspect;
-} GIFHeader;
-
-typedef struct {
-    unsigned char *pattern;
-    int length;
-} DictEntry;
-
-// Dictionary structure
-DictEntry dictionary[MAX_DICT_SIZE];
-int dict_size;
-
-// Initialize dictionary with single pixel values
-void init_dictionary() {
-    dict_size = 0;
-    for (int i = 0; i < INITIAL_DICT_SIZE; i++) {
-        dictionary[i].pattern = (unsigned char*)malloc(1);
-        dictionary[i].pattern[0] = i;
-        dictionary[i].length = 1;
-        dict_size++;
+// Compression function
+int compressLZW(const char* inputFile, const char* outputFile) {
+    FILE* input = fopen(inputFile, "rb");
+    if (!input) {
+        printf("Cannot open input file: %s\n", inputFile);
+        return 1;
     }
-}
 
-// Find pattern in dictionary
-int find_pattern(unsigned char *pattern, int length) {
-    for (int i = 0; i < dict_size; i++) {
-        if (dictionary[i].length == length) {
-            if (memcmp(dictionary[i].pattern, pattern, length) == 0) {
-                return i;
+    FILE* output = fopen(outputFile, "wb");
+    if (!output) {
+        printf("Cannot create output file: %s\n", outputFile);
+        fclose(input);
+        return 1;
+    }
+
+    // Read PGM header
+    PGMHeader pgm;
+    char line[MAX_LINE];
+    if (!readLine(input, line, MAX_LINE) || sscanf(line, "%2s", pgm.magic) != 1) {
+        printf("Failed to read magic number\n");
+        fclose(input);
+        fclose(output);
+        return 1;
+    }
+    if (!readLine(input, line, MAX_LINE) || sscanf(line, "%d %d", &pgm.width, &pgm.height) != 2) {
+        printf("Failed to read dimensions\n");
+        fclose(input);
+        fclose(output);
+        return 1;
+    }
+    if (!readLine(input, line, MAX_LINE) || sscanf(line, "%d", &pgm.maxval) != 1) {
+        printf("Failed to read maxval\n");
+        fclose(input);
+        fclose(output);
+        return 1;
+    }
+
+    if ((strcmp(pgm.magic, "P2") != 0 && strcmp(pgm.magic, "P5") != 0) || pgm.maxval > 255) {
+        printf("Unsupported PGM format: %s, maxval: %d\n", pgm.magic, pgm.maxval);
+        fclose(input);
+        fclose(output);
+        return 1;
+    }
+
+    long totalPixels = (long)pgm.width * pgm.height;
+    unsigned char* imageData = (unsigned char*)malloc(totalPixels);
+    if (!imageData) {
+        printf("Memory allocation failed\n");
+        fclose(input);
+        fclose(output);
+        return 1;
+    }
+
+    // Read image data
+    if (strcmp(pgm.magic, "P2") == 0) {
+        for (long i = 0; i < totalPixels; i++) {
+            int pixel;
+            if (fscanf(input, "%d", &pixel) != 1) {
+                printf("Error reading P2 data at pixel %ld\n", i);
+                free(imageData);
+                fclose(input);
+                fclose(output);
+                return 1;
+            }
+            imageData[i] = (unsigned char)pixel;
+        }
+    } else {
+        if (fread(imageData, 1, totalPixels, input) != totalPixels) {
+            printf("Error reading P5 data\n");
+            free(imageData);
+            fclose(input);
+            fclose(output);
+            return 1;
+        }
+    }
+    fseek(input, 0, SEEK_END);
+    long size = ftell(input);
+    fseek(input, sizeof(pgm), SEEK_SET);
+
+    fclose(input);
+
+    // Initialize dictionary
+    DictionaryEntry* dict = (DictionaryEntry*)malloc(MAX_DICT_SIZE * sizeof(DictionaryEntry));
+    int dictSize = MAX_SIZE;
+    for (int i = 0; i < MAX_SIZE; i++) {
+        dict[i].prefix = -1;
+        dict[i].value = (unsigned char)i;
+        dict[i].code = i;
+    }
+
+    // Write header
+    fwrite(&pgm.width, sizeof(int), 1, output);
+    fwrite(&pgm.height, sizeof(int), 1, output);
+    fwrite(pgm.magic, sizeof(char), 2, output);
+
+    // Compress using LZW
+    int code = imageData[0];
+    int nextCode = MAX_SIZE;
+    unsigned int bitBuffer = 0;
+    int bits = 0;
+
+    for (long i = 1; i < totalPixels; i++) {
+        unsigned char nextChar = imageData[i];
+        int j;
+        for (j = 0; j < dictSize; j++) {
+            if (dict[j].prefix == code && dict[j].value == nextChar) {
+                code = dict[j].code;
+                break;
             }
         }
-    }
-    return -1;
-}
-
-// Add pattern to dictionary
-void add_to_dictionary(unsigned char *pattern, int length) {
-    if (dict_size < MAX_DICT_SIZE) {
-        dictionary[dict_size].pattern = (unsigned char*)malloc(length);
-        memcpy(dictionary[dict_size].pattern, pattern, length);
-        dictionary[dict_size].length = length;
-        dict_size++;
-    }
-}
-
-// Read GIF header
-GIFHeader read_gif_header(FILE *file) {
-    GIFHeader header;
-    fread(header.signature, 1, 6, file);
-    fread(&header.width, 2, 1, file);
-    fread(&header.height, 2, 1, file);
-    fread(&header.flags, 1, 1, file);
-    fread(&header.background, 1, 1, file);
-    fread(&header.aspect, 1, 1, file);
-    return header;
-}
-
-// Verify if file is valid GIF
-int is_valid_gif(const GIFHeader *header) {
-    return memcmp(header->signature, GIF_SIGNATURE, 6) == 0;
-}
-
-// Bit buffer for output
-typedef struct {
-    unsigned char *data;
-    unsigned int current;
-    int remainingBits;
-    int bytePos;
-    int totalBytes;
-} BitBuffer;
-
-// Initialize bit buffer
-BitBuffer* create_bit_buffer(int size) {
-    BitBuffer* buffer = (BitBuffer*)malloc(sizeof(BitBuffer));
-    buffer->data = (unsigned char*)calloc(size, 1);
-    buffer->current = 0;
-    buffer->remainingBits = 8;
-    buffer->bytePos = 0;
-    buffer->totalBytes = size;
-    return buffer;
-}
-
-// Write bits to buffer
-void write_bits(BitBuffer *buffer, int code, int bits) {
-    while (bits > 0) {
-        if (buffer->remainingBits == 0) {
-            buffer->data[buffer->bytePos++] = buffer->current;
-            buffer->current = 0;
-            buffer->remainingBits = 8;
-        }
-
-        int writeBits = bits < buffer->remainingBits ? bits : buffer->remainingBits;
-        int mask = (1 << writeBits) - 1;
-        int shift = bits - writeBits;
-        int fragment = (code >> shift) & mask;
-
-        buffer->current |= fragment << (buffer->remainingBits - writeBits);
-        buffer->remainingBits -= writeBits;
-        bits -= writeBits;
-    }
-}
-
-void flush_bit_buffer(BitBuffer *buffer) {
-    if (buffer->remainingBits < 8) {
-        buffer->data[buffer->bytePos++] = buffer->current;
-    }
-}
-
-// Write compressed data blocks
-void write_compressed_blocks(FILE *output, BitBuffer *buffer) {
-    int remaining = buffer->bytePos;
-    int pos = 0;
-    
-    while (remaining > 0) {
-        int blockSize = remaining > BLOCK_SIZE ? BLOCK_SIZE : remaining;
-        fputc(blockSize, output);
-        fwrite(buffer->data + pos, 1, blockSize, output);
-        remaining -= blockSize;
-        pos += blockSize;
-    }
-    
-    // Write block terminator
-    fputc(0x00, output);
-}
-
-// Improved compress_image function
-void compress_image(unsigned char *input, int size, FILE *output, GIFHeader *header) {
-    // Write GIF header
-    fwrite(header->signature, 1, 6, output);
-    fwrite(&header->width, 2, 1, output);
-    fwrite(&header->height, 2, 1, output);
-    fwrite(&header->flags, 1, 1, output);
-    fwrite(&header->background, 1, 1, output);
-    fwrite(&header->aspect, 1, 1, output);
-    
-    // Write Global Color Table if present
-    if (header->flags & 0x80) {
-        int gct_size = 2 << (header->flags & 0x07);
-        unsigned char gct[768];  // Max size for global color table
-        fwrite(gct, 1, gct_size * 3, output);
-    }
-    
-    // Write Image Descriptor
-    fputc(0x2C, output);  // Image Separator
-    int left = 0, top = 0;
-    fwrite(&left, 2, 1, output);
-    fwrite(&top, 2, 1, output);
-    fwrite(&header->width, 2, 1, output);
-    fwrite(&header->height, 2, 1, output);
-    fputc(0x00, output);  // Local Image Descriptor
-    
-    // Initialize LZW
-    init_dictionary();
-    int min_code_size = 8;  // Start with 8 bits for 256 colors
-    int code_size = min_code_size + 1;
-    int clear_code = CLEAR_CODE(min_code_size);
-    int end_code = END_CODE(min_code_size);
-    int next_code = end_code + 1;
-    
-    // Write minimum code size
-    fputc(min_code_size, output);
-    
-    // Initialize bit buffer with reasonable size
-    BitBuffer *buffer = create_bit_buffer(size);
-    
-    // Write initial clear code
-    write_bits(buffer, clear_code, code_size);
-    
-    // Initialize compression dictionary
-    init_dictionary();
-    dict_size = clear_code + 2;  // Start after clear and end codes
-    
-    int prefix = input[0];
-    int current_length = 1;
-    
-    for (int i = 1; i < size; i++) {
-        int character = input[i];
-        
-        // Build current sequence
-        unsigned char *sequence = (unsigned char*)malloc(current_length + 1);
-        memcpy(sequence, dictionary[prefix].pattern, dictionary[prefix].length);
-        sequence[current_length] = character;
-        
-        int code = find_pattern(sequence, current_length + 1);
-        
-        if (code != -1) {
-            // Sequence exists in dictionary
-            prefix = code;
-            current_length++;
-        } else {
-            // Output code for prefix
-            write_bits(buffer, prefix, code_size);
-            
-            // Add new sequence to dictionary if space allows
-            if (dict_size < MAX_DICT_SIZE) {
-                add_to_dictionary(sequence, current_length + 1);
-                dict_size++;
-                
-                // Increase code size if needed
-                if (dict_size == (1 << code_size) && code_size < MAX_CODE_SIZE) {
-                    code_size++;
-                }
-            } else {
-                // Dictionary full - reset
-                write_bits(buffer, clear_code, code_size);
-                init_dictionary();
-                dict_size = clear_code + 2;
-                code_size = min_code_size + 1;
+        if (j == dictSize) {  // New sequence
+            bitBuffer = (bitBuffer << 12) | code;
+            bits += 12;
+            while (bits >= 8) {
+                unsigned char byte = (bitBuffer >> (bits - 8)) & 0xFF;
+                fwrite(&byte, 1, 1, output);
+                bits -= 8;
             }
-            
-            prefix = character;
-            current_length = 1;
+            bitBuffer &= (1 << bits) - 1;  // Clear written bits
+
+            if (dictSize < MAX_DICT_SIZE) {
+                dict[dictSize].prefix = code;
+                dict[dictSize].value = nextChar;
+                dict[dictSize].code = nextCode++;
+                dictSize++;
+            }
+            code = nextChar;
         }
-        
-        free(sequence);
     }
-    
     // Output final code
-    write_bits(buffer, prefix, code_size);
-    write_bits(buffer, end_code, code_size);
-    
-    // Flush remaining bits
-    flush_bit_buffer(buffer);
-    
-    // Write compressed data blocks
-    write_compressed_blocks(output, buffer);
-    
-    // Write GIF trailer
-    fputc(0x3B, output);
-    
-    // Cleanup
-    free(buffer->data);
-    free(buffer);
-}
+    bitBuffer = (bitBuffer << 12) | code;
+    bits += 12;
+    while (bits > 0) {
+        unsigned char byte = (bitBuffer >> (bits - 8)) & 0xFF;
+        fwrite(&byte, 1, 1, output);
+        bits -= 8;
+        if (bits < 0) break;
+    }
 
-int main() {
-    FILE *input_file = fopen("input.gif", "rb");
-    FILE *output_file = fopen("compressed.gif", "wb");
-    
-    if (!input_file || !output_file) {
-        printf("Error opening files\n");
-        return 1;
-    }
-    
-    // Read GIF header
-    GIFHeader header = read_gif_header(input_file);
-    
-    if (!is_valid_gif(&header)) {
-        printf("Invalid GIF file!\n");
-        fclose(input_file);
-        fclose(output_file);
-        return 1;
-    }
-    
-    printf("GIF Image Details:\n");
-    printf("Width: %d\n", header.width);
-    printf("Height: %d\n", header.height);
-    
-    // Get image data size
-    fseek(input_file, 0, SEEK_END);
-    long size = ftell(input_file);
-    fseek(input_file, sizeof(GIFHeader), SEEK_SET);
-    
-    // Modify the image data reading to handle color table
-    unsigned char *image_data = (unsigned char*)malloc(size);
-    fseek(input_file, sizeof(GIFHeader), SEEK_SET);
-    
-    // Skip color table if present
-    if (header.flags & 0x80) {
-        int color_table_size = 3 * (1 << ((header.flags & 7) + 1));
-        fseek(input_file, color_table_size, SEEK_CUR);
-    }
-    
-    // Skip other blocks until image data
-    unsigned char block_type;
-    while ((block_type = fgetc(input_file)) != 0x2C) {
-        if (block_type == 0x21) {  // Extension block
-            fgetc(input_file);  // Skip extension type
-            unsigned char block_size;
-            while ((block_size = fgetc(input_file)) != 0) {
-                fseek(input_file, block_size, SEEK_CUR);
-            }
-        }
-    }
-    
-    // Read actual image data
-    fseek(input_file, 9, SEEK_CUR);  // Skip image descriptor
-    int lzw_min_size = fgetc(input_file);
-    
-    // Read image data blocks
-    int data_size = 0;
-    unsigned char block_size;
-    while ((block_size = fgetc(input_file)) != 0) {
-        fread(image_data + data_size, 1, block_size, input_file);
-        data_size += block_size;
-    }
-    
-    // Compress image
-    compress_image(image_data, data_size, output_file, &header);
-    
-    // Cleanup
-    free(image_data);
-    fclose(input_file);
-    fclose(output_file);
-    
-    printf("Compression complete!\n");
+    fclose(output);
+    free(imageData);
+    free(dict);
+
+    // Get original file size
     printf("Original size: %ld bytes\n", size);
     
     // Get compressed file size
-    FILE *check_size = fopen("compressed.gif", "rb");
+    FILE *check_size = fopen("compressed.bin", "rb");
     fseek(check_size, 0, SEEK_END);
     long compressed_size = ftell(check_size);
     fclose(check_size);
     
     printf("Compressed size: %ld bytes\n", compressed_size);
     printf("Compression ratio: %.2f%%\n", 
-           (1.0 - ((float)compressed_size / size)) * 100);
-    
-    // Free dictionary memory
-    for (int i = 0; i < dict_size; i++) {
-        free(dictionary[i].pattern);
+           (1.0 - ((float)compressed_size / size)) * 100); 
+
+    return 0;
+}
+
+// Decompression function
+int decompressLZW(const char* inputFile, const char* outputFile) {
+    FILE* input = fopen(inputFile, "rb");
+    if (!input) {
+        printf("Cannot open input file: %s\n", inputFile);
+        return 1;
     }
-    
+
+    // Read header
+    PGMHeader pgm;
+    if (fread(&pgm.width, sizeof(int), 1, input) != 1 ||
+        fread(&pgm.height, sizeof(int), 1, input) != 1 ||
+        fread(pgm.magic, sizeof(char), 2, input) != 2) {
+        printf("Failed to read header\n");
+        fclose(input);
+        return 1;
+    }
+    pgm.magic[2] = '\0';
+    pgm.maxval = 255;
+
+    long totalPixels = (long)pgm.width * pgm.height;
+    unsigned char* decompressedData = (unsigned char*)malloc(totalPixels);
+    if (!decompressedData) {
+        printf("Memory allocation failed\n");
+        fclose(input);
+        return 1;
+    }
+
+    // Initialize dictionary
+    DictionaryEntry* dict = (DictionaryEntry*)malloc(MAX_DICT_SIZE * sizeof(DictionaryEntry));
+    int dictSize = MAX_SIZE;
+    for (int i = 0; i < MAX_SIZE; i++) {
+        dict[i].prefix = -1;
+        dict[i].value = (unsigned char)i;
+        dict[i].code = i;
+    }
+
+    // Decompress using LZW
+    unsigned int bitBuffer = 0;
+    int bits = 0;
+    long pixelsWritten = 0;
+    int nextCode = MAX_SIZE;
+
+    // Read first code
+    unsigned char byte;
+    if (fread(&byte, 1, 1, input) != 1) {
+        printf("Failed to read initial byte\n");
+        free(decompressedData);
+        free(dict);
+        fclose(input);
+        return 1;
+    }
+    bitBuffer = byte;
+    bits = 8;
+    if (fread(&byte, 1, 1, input) != 1) {
+        printf("Failed to read second byte\n");
+        free(decompressedData);
+        free(dict);
+        fclose(input);
+        return 1;
+    }
+    bitBuffer = (bitBuffer << 8) | byte;
+    bits += 8;
+
+    int code = (bitBuffer >> (bits - 12)) & 0xFFF;
+    bits -= 12;
+    decompressedData[pixelsWritten++] = (unsigned char)code;
+    int prevCode = code;
+
+    while (pixelsWritten < totalPixels) {
+        while (bits < 12) {
+            if (fread(&byte, 1, 1, input) != 1) {
+                printf("Unexpected end of file\n");
+                break;
+            }
+            bitBuffer = (bitBuffer << 8) | byte;
+            bits += 8;
+        }
+        code = (bitBuffer >> (bits - 12)) & 0xFFF;
+        bits -= 12;
+
+        unsigned char temp[MAX_SIZE];
+        int tempLen = 0;
+        int currentCode = code;
+
+        if (code >= dictSize) {
+            currentCode = prevCode;
+            temp[tempLen++] = dict[prevCode].value;
+        }
+
+        while (currentCode >= 0 && tempLen < MAX_SIZE) {
+            temp[tempLen++] = dict[currentCode].value;
+            currentCode = dict[currentCode].prefix;
+        }
+
+        for (int i = tempLen - 1; i >= 0 && pixelsWritten < totalPixels; i--) {
+            decompressedData[pixelsWritten++] = temp[i];
+        }
+
+        if (dictSize < MAX_DICT_SIZE) {
+            dict[dictSize].prefix = prevCode;
+            dict[dictSize].value = temp[tempLen - 1];
+            dict[dictSize].code = nextCode++;
+            dictSize++;
+        }
+        prevCode = code;
+    }
+
+    fclose(input);
+
+    if (pixelsWritten != totalPixels) {
+        printf("Error: Decompressed pixel count (%ld) doesn't match expected (%ld)\n",
+               pixelsWritten, totalPixels);
+        free(decompressedData);
+        free(dict);
+        return 1;
+    }
+
+    // Write PGM file
+    FILE* output = fopen(outputFile, "wb");
+    if (!output) {
+        printf("Cannot create output file: %s\n", outputFile);
+        free(decompressedData);
+        free(dict);
+        return 1;
+    }
+
+    fprintf(output, "%s\n%d %d\n%d\n", pgm.magic, pgm.width, pgm.height, pgm.maxval);
+    if (strcmp(pgm.magic, "P2") == 0) {
+        for (long i = 0; i < totalPixels; i++) {
+            if (fprintf(output, "%d", decompressedData[i]) < 0) {
+                printf("Error writing P2 data\n");
+                fclose(output);
+                free(decompressedData);
+                free(dict);
+                return 1;
+            }
+            if ((i + 1) % pgm.width == 0) fprintf(output, "\n");
+            else fprintf(output, " ");
+        }
+    } else {
+        if (fwrite(decompressedData, 1, totalPixels, output) != totalPixels) {
+            printf("Error writing P5 data\n");
+            fclose(output);
+            free(decompressedData);
+            free(dict);
+            return 1;
+        }
+    }
+
+    fclose(output);
+    free(decompressedData);
+    free(dict);
+    return 0;
+}
+
+// Main function with validation
+int lzw() {
+    char inputFile[256];
+    char compressedFile[256] = "compressed.bin";
+    char decompressedFile[256];
+    int yn;
+
+    printf("\nWhat do you want to do??\n1.Compress an image.\n2.Decompress an image.\n");
+    printf("Enter your choice in number: ");  
+    scanf("%d", &yn);
+    if(yn == 1){
+        printf("Enter the input PGM file name:");
+        scanf("%255s", inputFile);
+
+
+        printf("Attempting to compress %s...\n", inputFile);
+        if (compressLZW(inputFile, compressedFile) == 0) {
+            printf("Compression successful: %s -> %s\n", inputFile, compressedFile);
+
+        } else {
+            printf("Compression failed\n");
+        }
+    }
+    else if(yn == 2){ 
+        printf("Enter decompressed PGM file name: ");
+        scanf("%255s", decompressedFile);
+        printf("Attempting to decompress %s...\n", compressedFile);
+        if (decompressLZW(compressedFile, decompressedFile) == 0) {
+            printf("Decompression successful: %s -> %s\n", compressedFile, decompressedFile);
+
+            FILE* comp = fopen(compressedFile, "rb");
+            fseek(comp, 0, SEEK_END);
+            long compSize = ftell(comp);
+            fclose(comp);
+        
+            FILE* decomp = fopen(decompressedFile, "rb");
+            fseek(decomp, 0, SEEK_END);
+            long decompSize = ftell(decomp);
+            fclose(decomp);
+
+            printf("Compressed size: %ld bytes\n", compSize);
+            printf("Decompressed size: %ld bytes\n", decompSize);
+        } else {
+            printf("Decompression failed\n");
+        }
+    }
+    else{
+        printf("Invalid choice.\n");
+    }
+
     return 0;
 }
