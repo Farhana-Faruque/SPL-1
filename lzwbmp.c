@@ -16,7 +16,7 @@ typedef struct {
 unsigned char* lzw_compress(unsigned char* input, uint32_t input_size, uint32_t* output_size) {
     DictionaryEntry2 dict[MAX_DICT_SIZE];
     uint16_t dict_size = INITIAL_DICT_SIZE;
-    uint32_t i;
+    unsigned int i;
 
     for (i = 0; i < INITIAL_DICT_SIZE; i++) {
         dict[i].prefix = 0xFFFF;
@@ -28,9 +28,9 @@ unsigned char* lzw_compress(unsigned char* input, uint32_t input_size, uint32_t*
         printf("Error: Memory allocation failed for compression\n");
         return NULL;
     }
-    uint32_t output_pos = 0;
+    unsigned int output_pos = 0;
     uint16_t prefix = input[0];
-    uint32_t input_pos = 1;
+    unsigned int input_pos = 1;
 
     while (input_pos < input_size) {
         uint8_t next_char = input[input_pos++];
@@ -67,7 +67,7 @@ unsigned char* lzw_compress(unsigned char* input, uint32_t input_size, uint32_t*
 unsigned char* lzw_decompress(unsigned char* input, uint32_t input_size, uint32_t original_size) {
     DictionaryEntry2 dict[MAX_DICT_SIZE];
     uint16_t dict_size = INITIAL_DICT_SIZE;
-    uint32_t i;
+    unsigned int i;
 
     for (i = 0; i < INITIAL_DICT_SIZE; i++) {
         dict[i].prefix = 0xFFFF;
@@ -79,8 +79,8 @@ unsigned char* lzw_decompress(unsigned char* input, uint32_t input_size, uint32_
         printf("Error: Memory allocation failed for decompression\n");
         return NULL;
     }
-    uint32_t output_pos = 0;
-    uint32_t input_pos = 0;
+    unsigned int output_pos = 0;
+    unsigned int input_pos = 0;
 
     uint16_t old_code = input[input_pos++] | (input[input_pos++] << 8);
     output[output_pos++] = (uint8_t)old_code;
@@ -88,7 +88,7 @@ unsigned char* lzw_decompress(unsigned char* input, uint32_t input_size, uint32_
     while (input_pos < input_size) {
         uint16_t new_code = input[input_pos++] | (input[input_pos++] << 8);
         uint8_t* temp = malloc(original_size); // Temporary buffer for string
-        uint32_t temp_pos = 0;
+        unsigned int temp_pos = 0;
 
         if (new_code >= dict_size) {
             temp[temp_pos++] = dict[old_code].append;
@@ -149,7 +149,7 @@ int compressBMP2(const char* input_file, const char* output_file) {
            infoHeader.biWidth, infoHeader.biHeight, infoHeader.biBitCount, fileHeader.bfSize);
 
     fseek(fin, fileHeader.bfOffbits, SEEK_SET);
-    uint32_t dataSize = infoHeader.biWidth * abs(infoHeader.biHeight) * (infoHeader.biBitCount / 8);
+    unsigned int dataSize = infoHeader.biWidth * abs(infoHeader.biHeight) * (infoHeader.biBitCount / 8);
     unsigned char* pixelData = malloc(dataSize);
     if (!pixelData) {
         printf("Error: Memory allocation failed\n");
@@ -169,7 +169,7 @@ int compressBMP2(const char* input_file, const char* output_file) {
         fseek(fin, padding, SEEK_CUR);
     }
 
-    uint32_t compressed_size;
+    unsigned int compressed_size;
     unsigned char* compressed = lzw_compress(pixelData, dataSize, &compressed_size);
     if (!compressed) {
         free(pixelData);
@@ -241,7 +241,7 @@ int decompressBMP2(const char* input_file, const char* output_file) {
         return -1;
     }
 
-    uint32_t original_size;
+    unsigned int original_size;
     if (fread(&original_size, sizeof(uint32_t), 1, fin) != 1) {
         printf("Error: Failed to read original size\n");
         fclose(fin);
