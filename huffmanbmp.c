@@ -8,7 +8,7 @@
 
 // Huffman Node (using typedef consistently)
 typedef struct HuffmanNode {
-    uint32_t freq;
+    unsigned int freq;
     uint8_t symbol;
     struct HuffmanNode* left;
     struct HuffmanNode* right;
@@ -21,7 +21,7 @@ typedef struct {
     int bit_count;
 } BitBuffer;
 
-HuffmanNode* create_node(uint8_t symbol, uint32_t freq) {
+HuffmanNode* create_node(uint8_t symbol, unsigned int freq) {
     HuffmanNode* node = malloc(sizeof(HuffmanNode));
     node->symbol = symbol;
     node->freq = freq;
@@ -37,15 +37,15 @@ void free_tree(HuffmanNode* node) {
 }
 
 // Build frequency table
-void build_freq_table(unsigned char* data, uint32_t size, uint32_t* freq) {
-    memset(freq, 0, 256 * sizeof(uint32_t));
-    for (uint32_t i = 0; i < size; i++) {
+void build_freq_table(unsigned char* data, unsigned int size, unsigned int* freq) {
+    memset(freq, 0, 256 * sizeof(unsigned int));
+    for (unsigned int i = 0; i < size; i++) {
         freq[data[i]]++;
     }
 }
 
 // Build Huffman tree
-HuffmanNode* build_huffman_tree(uint32_t* freq) {
+HuffmanNode* build_huffman_tree(unsigned int* freq) {
     HuffmanNode* nodes[MAX_TREE_NODES];
     int node_count = 0;
 
@@ -84,7 +84,7 @@ HuffmanNode* build_huffman_tree(uint32_t* freq) {
 }
 
 // Generate Huffman codes
-void generate_codes(HuffmanNode* root, uint32_t code, int length, uint32_t* codes, int* lengths) {
+void generate_codes(HuffmanNode* root, unsigned int code, int length, unsigned int* codes, int* lengths) {
     if (!root->left && !root->right) {
         codes[root->symbol] = code;
         lengths[root->symbol] = length;
@@ -151,7 +151,7 @@ int compressBMP3(const char* input_file, const char* output_file) {
         return -1;
     }
 
-    uint32_t dataSize = infoHeader.biWidth * abs(infoHeader.biHeight) * 3;
+    unsigned int dataSize = infoHeader.biWidth * abs(infoHeader.biHeight) * 3;
     unsigned char* pixelData = malloc(dataSize);
     fseek(fin, fileHeader.bfOffbits, SEEK_SET);
     int padding = (4 - (infoHeader.biWidth * 3) % 4) % 4;
@@ -166,11 +166,11 @@ int compressBMP3(const char* input_file, const char* output_file) {
 
     fclose(fin);
 
-    uint32_t freq[256];
+    unsigned int freq[256];
     build_freq_table(pixelData, dataSize, freq);
     HuffmanNode* root = build_huffman_tree(freq);
 
-    uint32_t codes[256] = {0};
+    unsigned int codes[256] = {0};
     int lengths[256] = {0};
     generate_codes(root, 0, 0, codes, lengths);
 
@@ -189,11 +189,11 @@ int compressBMP3(const char* input_file, const char* output_file) {
 
     fwrite(&fileHeader, sizeof(BITMAPFILEHEADER), 1, fout);
     fwrite(&infoHeader, sizeof(BITMAPINFOHEADER), 1, fout);
-    fwrite(&dataSize, sizeof(uint32_t), 1, fout);
-    fwrite(freq, sizeof(uint32_t), 256, fout);
+    fwrite(&dataSize, sizeof(unsigned int), 1, fout);
+    fwrite(freq, sizeof(unsigned int), 256, fout);
 
-    for (uint32_t i = 0; i < dataSize; i++) {
-        uint32_t code = codes[pixelData[i]];
+    for (unsigned int i = 0; i < dataSize; i++) {
+        unsigned int code = codes[pixelData[i]];
         int len = lengths[pixelData[i]];
         for (int j = len - 1; j >= 0; j--) {
             write_bit(&bb, (code >> j) & 1);
@@ -201,7 +201,7 @@ int compressBMP3(const char* input_file, const char* output_file) {
     }
     flush_bit_buffer(&bb);
 
-    uint32_t compressed_size = ftell(fout) - fileHeader.bfOffbits;
+    unsigned int compressed_size = ftell(fout) - fileHeader.bfOffbits;
     infoHeader.biSizeImage = compressed_size;
     fileHeader.bfSize = fileHeader.bfOffbits + compressed_size;
     fseek(fout, 0, SEEK_SET);
@@ -248,18 +248,18 @@ int decompressBMP3(const char* input_file, const char* output_file) {
         return -1;
     }
 
-    uint32_t original_size;
-    fread(&original_size, sizeof(uint32_t), 1, fin);
+    unsigned int original_size;
+    fread(&original_size, sizeof(unsigned int), 1, fin);
 
-    uint32_t freq[256];
-    fread(freq, sizeof(uint32_t), 256, fin);
+    unsigned int freq[256];
+    fread(freq, sizeof(unsigned int), 256, fin);
 
     HuffmanNode* root = build_huffman_tree(freq);
     unsigned char* pixelData = malloc(original_size);
     BitBuffer bb;
     init_bit_buffer(&bb, fin);
 
-    uint32_t pos = 0;
+    unsigned int pos = 0;
     HuffmanNode* current = root;
     while (pos < original_size) {
         int bit = read_bit(&bb);
@@ -280,8 +280,7 @@ int decompressBMP3(const char* input_file, const char* output_file) {
     }
 
     fileHeader.bfOffbits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
-    fileHeader.bfSize = fileHeader.bfOffbits + original_size + 
-                     (abs(infoHeader.biHeight) * ((4 - (infoHeader.biWidth * 3) % 4) % 4));
+    fileHeader.bfSize = fileHeader.bfOffbits + original_size + (abs(infoHeader.biHeight) * ((4 - (infoHeader.biWidth * 3) % 4) % 4));
     infoHeader.biCompression = 0;
     infoHeader.biSizeImage = 0;
 
