@@ -13,7 +13,7 @@ typedef struct {
 } DictionaryEntry2;
 
 // LZW Compression
-unsigned char* lzw_compress(unsigned char* input, uint32_t input_size, uint32_t* output_size) {
+unsigned char* lzw_compress(unsigned char* input, unsigned int input_size, unsigned int* output_size) {
     DictionaryEntry2 dict[MAX_DICT_SIZE];
     uint16_t dict_size = INITIAL_DICT_SIZE;
     unsigned int i;
@@ -64,7 +64,7 @@ unsigned char* lzw_compress(unsigned char* input, uint32_t input_size, uint32_t*
 }
 
 // LZW Decompression
-unsigned char* lzw_decompress(unsigned char* input, uint32_t input_size, uint32_t original_size) {
+unsigned char* lzw_decompress(unsigned char* input, unsigned int input_size, unsigned int original_size) {
     DictionaryEntry2 dict[MAX_DICT_SIZE];
     uint16_t dict_size = INITIAL_DICT_SIZE;
     unsigned int i;
