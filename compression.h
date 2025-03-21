@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <jpeglib.h>
+//#include <jpeglib.h>
 
 // For PGM image compression
 
@@ -19,5 +19,4 @@
 
 
 // For JPEG image compression
-#include "JpegDCT.c"
-
+//#include "JpegDCT.c"
