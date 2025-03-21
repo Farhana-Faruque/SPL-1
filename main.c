@@ -5,7 +5,7 @@ int main(void){
     int choice1, choice2;
     printf("Welcome to the Image Compression Tool\n");
     printf("This tool is used to compress the image using different algorithms.\n");
-    printf("\nWhat is your image type??\n1.PGM image.\n2.BMP image.\n3.JPEG image.\n");
+    printf("\nWhat is your image type??\n1.PGM image.\n2.BMP image.\n");
     printf("Enter your choice in number: ");
     scanf("%d", &choice1);
     printf("\n");
@@ -51,10 +51,6 @@ int main(void){
             printf("Invalid choice.\n");
         }
 
-    }
-    else if(choice1 == 3){
-        printf("For JPEG image, we are using DCT algorithm.\n");
-        DCT();  
     }
     else{
         printf("Invalid choice.\n");
