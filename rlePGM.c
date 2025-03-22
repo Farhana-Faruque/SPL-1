@@ -9,19 +9,12 @@
 // Compression function
 int compressRLE(const char* inputFile, const char* outputFile) {
     FILE* input = fopen(inputFile, "rb");
-    if (!input) {
-        printf("Cannot open input file: %s\n", inputFile);
-        return 1;
-    }
-
     FILE* output = fopen(outputFile, "wb");
-    if (!output) {
-        printf("Cannot create output file: %s\n", outputFile);
-        fclose(input);
+    if (!input || !output) {
+        printf("Cannot open the file");
         return 1;
     }
 
-    // Read PGM header with improved parsing
     PGMHeader pgm;
     char line[MAX_LINE];
     
@@ -90,7 +83,6 @@ int compressRLE(const char* inputFile, const char* outputFile) {
     fseek(input, 0, SEEK_END);
     long size = ftell(input);
     fseek(input, sizeof(pgm), SEEK_SET);
-
     fclose(input);
 
     // Write header
@@ -98,7 +90,6 @@ int compressRLE(const char* inputFile, const char* outputFile) {
     fwrite(&pgm.height, sizeof(int), 1, output);
     fwrite(pgm.magic, sizeof(char), 2, output);
 
-    // Compress using RLE
     unsigned char currentValue = imageData[0];
     unsigned char count = 1;
     
@@ -124,7 +115,6 @@ int compressRLE(const char* inputFile, const char* outputFile) {
         fclose(output);
         return 1;
     }
-
     fclose(output);
     free(imageData);
 
@@ -132,15 +122,13 @@ int compressRLE(const char* inputFile, const char* outputFile) {
     printf("Original size: %ld bytes\n", size);
     
     // Get compressed file size
-    FILE *check_size = fopen("compressed.bin", "rb");
+    FILE *check_size = fopen(outputFile, "rb");
     fseek(check_size, 0, SEEK_END);
     long compressed_size = ftell(check_size);
     fclose(check_size);
     
     printf("Compressed size: %ld bytes\n", compressed_size);
-    printf("Compression ratio: %.2f%%\n", 
-           (1.0 - ((float)compressed_size / size)) * 100); 
-
+    printf("Compression ratio: %.2f%%\n",  (1.0 - ((float)compressed_size / size)) * 100); 
     return 0;
 }
 
