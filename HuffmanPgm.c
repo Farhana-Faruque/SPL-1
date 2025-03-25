@@ -16,15 +16,25 @@ int compressHuffman(const char* inputFile, const char* outputFile) {
 
     PGMHeader pgm;
     char line[MAX_LINE];
-    if ((!readLine(input, line, MAX_LINE) || sscanf(line, "%2s", pgm.sign) != 1) && 
-        (!readLine(input, line, MAX_LINE) || sscanf(line, "%d %d", &pgm.width, &pgm.height) != 2) &&
-        (!readLine(input, line, MAX_LINE) || sscanf(line, "%d", &pgm.maxIntensity) != 1)) {
-        printf("Failed to read\n");
+    if (!readLine(input, line, MAX_LINE) || sscanf(line, "%2s", pgm.sign) != 1) {
+        printf("Failed to read magic number\n");
         fclose(input);
         fclose(output);
         return 1;
     }
-
+    if (!readLine(input, line, MAX_LINE) || sscanf(line, "%d %d", &pgm.width, &pgm.height) != 2) {
+        printf("Failed to read dimensions\n");
+        fclose(input);
+        fclose(output);
+        return 1;
+    }
+    if (!readLine(input, line, MAX_LINE) || sscanf(line, "%d", &pgm.maxIntensity) != 1) {
+        printf("Failed to read maxval\n");
+        fclose(input);
+        fclose(output);
+        return 1;
+    }
+    
     if ((strcmp(pgm.sign, "P2") != 0 && strcmp(pgm.sign, "P5") != 0) || pgm.maxIntensity > 255) {
         printf("Unsupported PGM format: %s, maxval: %d\n", pgm.sign, pgm.maxIntensity);
         fclose(input);
