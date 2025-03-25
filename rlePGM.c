@@ -16,11 +16,22 @@ int compressRLE(const char* inputFile, const char* outputFile) {
 
     PGMHeader pgm;
     char line[MAX_LINE];
-
-    if ((!readLine(input, line, MAX_LINE) || sscanf(line, "%2s", pgm.sign) != 1) &&
-      (!readLine(input, line, MAX_LINE) || sscanf(line, "%d %d", &pgm.width, &pgm.height) != 2) && 
-      (!readLine(input, line, MAX_LINE) || sscanf(line, "%d", &pgm.maxIntensity) != 1)) {
-        printf("Failed to read.\n");
+    if (!readLine(input, line, MAX_LINE) || sscanf(line, "%2s", pgm.sign) != 1) {
+        printf("Failed to read magic number\n");
+        fclose(input);
+        fclose(output);
+        return 1;
+    }
+    
+    if (!readLine(input, line, MAX_LINE) || sscanf(line, "%d %d", &pgm.width, &pgm.height) != 2) {
+        printf("Failed to read dimensions from line: %s", line);
+        fclose(input);
+        fclose(output);
+        return 1;
+    }
+    
+    if (!readLine(input, line, MAX_LINE) || sscanf(line, "%d", &pgm.maxIntensity) != 1) {
+        printf("Failed to read maxval\n");
         fclose(input);
         fclose(output);
         return 1;
@@ -130,8 +141,8 @@ int decompressRLE(const char* inputFile, const char* outputFile) {
     pgm.sign[2] = '\0';
     pgm.maxIntensity = 255;
 
-    long tP = (long)pgm.width * pgm.height; // totalPixels
-    unsigned char* dD = (unsigned char*)malloc(tP); // decompressedData
+    long tP = (long)pgm.width * pgm.height;
+    unsigned char* dD = (unsigned char*)malloc(tP);
     if (!dD) {
         printf("Memory allocation failed\n");
         fclose(input);
@@ -140,26 +151,25 @@ int decompressRLE(const char* inputFile, const char* outputFile) {
 
     unsigned char value;
     unsigned char count;
-    long pixels = 0;
+    long pixelsWritten = 0;
     
-    while (pixels < tP) {
+    while (pixelsWritten < tP) {
         if (fread(&value, sizeof(unsigned char), 1, input) != 1 ||
             fread(&count, sizeof(unsigned char), 1, input) != 1) {
-            printf("Error reading RLE pair at pixel %ld\n", pixels);
+            printf("Error reading RLE pair at pixel %ld\n", pixelsWritten);
             free(dD);
             fclose(input);
             return 1;
         }
-        for (int i = 0; i < count && pixels < tP; i++) {
-            dD[pixels++] = value;
+        for (int i = 0; i < count && pixelsWritten < tP; i++) {
+            dD[pixelsWritten++] = value;
         }
     }
-
     fclose(input);
 
-    if (pixels != tP) {
+    if (pixelsWritten != tP) {
         printf("Error: Decompressed pixel count (%ld) doesn't match expected (%ld)\n",
-               pixels, tP);
+               pixelsWritten, tP);
         free(dD);
         return 1;
     }
